@@ -1,24 +1,26 @@
 from pathlib import Path
 
+import onnx
 import torch
 import torchvision.models as models
-import onnx
 
 
 def main() -> None:
-    output_path = Path("export/resnet50_fp32.onnx")
+    output_path = Path("export/resnet50_fp32_trt.onnx")
 
-    # Load pretrained ResNet50
     weights = models.ResNet50_Weights.DEFAULT
     model = models.resnet50(weights=weights)
 
-    # Inference mode
     model.eval()
 
-    # Example input
-    dummy_input = torch.randn(1, 3, 224, 224)
+    dummy_input = torch.randn(
+        1,
+        3,
+        224,
+        224,
+    )
 
-    print("Exporting ResNet50 to ONNX...")
+    print("Exporting ResNet50 for TensorRT...")
 
     torch.onnx.export(
         model,
@@ -31,11 +33,13 @@ def main() -> None:
             "input": {0: "batch_size"},
             "output": {0: "batch_size"},
         },
+        external_data=False,
     )
 
-    print(f"ONNX model saved to: {output_path}")
+    print(
+        f"ONNX model saved to: {output_path}"
+    )
 
-    # Validate the ONNX file
     print("Checking ONNX model...")
 
     onnx_model = onnx.load(output_path)
