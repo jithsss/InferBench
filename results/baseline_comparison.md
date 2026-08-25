@@ -1,18 +1,24 @@
 # ResNet50 FP32 Runtime Comparison
 
-Hardware:
-- GPU: NVIDIA GeForce RTX 3060
+## Hardware
 
-| Runtime | Device | Precision | Latency | Throughput |
-|---|---|---|---:|---:|
-| PyTorch | RTX 3060 | FP32 | 4.726 ms | 211.58 FPS |
-| ONNX Runtime | RTX 3060 | FP32 | 25.213 ms | 39.66 FPS |
-| ONNX Runtime | CPU | FP32 | 23.952 ms | 41.75 FPS |
+- GPU: NVIDIA GeForce RTX 3060
+- Input: 1 × 3 × 224 × 224
+- Precision: FP32
+- Iterations: 100
+- Warm-up: 20
+
+## Results
+
+| Runtime     | Device   | Average  | P50      | P95      | P99      | Throughput |
+|-------------|---:------|---:------|---:------|---:------|---:------|------------|
+| PyTorch     | RTX 3060 | 4.665 ms | 4.156 ms | 6.464 ms | 8.670 ms | 214.38 FPS |
+| ONNX Runtime| RTX 3060 | 3.228 ms | 3.134 ms | 3.572 ms | 3.801 ms | 309.75 FPS |
 
 ## Observation
 
-In the current batch-1 benchmark, PyTorch achieved substantially
-higher throughput than ONNX Runtime. This indicates that the current
-benchmark includes runtime/input overhead and that ONNX Runtime
-requires further profiling and optimization before drawing conclusions
-about deployment performance.
+ONNX Runtime achieved lower latency and higher throughput than the
+PyTorch baseline in this batch-1 FP32 benchmark.
+
+Average latency decreased by approximately 30.8%, while throughput
+increased by approximately 44.5%.
