@@ -1,7 +1,7 @@
 import time
 
-import torch
 import numpy as np
+import torch
 import onnxruntime as ort
 
 from benchmarks.benchmark_utils import (
@@ -31,9 +31,7 @@ def benchmark_onnx(
 
     latencies_ms: list[float] = []
 
-    # Benchmark
     for _ in range(benchmark_runs):
-
         start = time.perf_counter()
 
         session.run(
@@ -41,16 +39,24 @@ def benchmark_onnx(
             {input_name: input_data},
         )
 
-        elapsed = time.perf_counter() - start
+        # Synchronize CUDA work before stopping timer.
+        torch.cuda.synchronize()
 
+        elapsed = time.perf_counter() - start
         latencies_ms.append(elapsed * 1000)
 
     return latencies_ms
 
 
 def main() -> None:
+    batch_size = 1
+
     print("PyTorch CUDA:", torch.version.cuda)
     print("CUDA available:", torch.cuda.is_available())
+    print("GPU:", torch.cuda.get_device_name(0))
+
+    # Reset PyTorch CUDA memory statistics.
+    torch.cuda.reset_peak_memory_stats()
 
     session = ort.InferenceSession(
         MODEL_PATH,
@@ -61,12 +67,16 @@ def main() -> None:
     )
 
     print("Model:", MODEL_PATH)
+    print("Batch size:", batch_size)
     print("Active providers:", session.get_providers())
 
     np.random.seed(42)
 
     input_data = np.random.randn(
-        1, 3, 224, 224
+        batch_size,
+        3,
+        224,
+        224,
     ).astype(np.float32)
 
     input_name = session.get_inputs()[0].name
@@ -82,6 +92,12 @@ def main() -> None:
     result = calculate_statistics(latencies_ms)
 
     print_results(result)
+
+    # PyTorch CUDA allocator statistics are not a reliable measurement
+    # of ONNX Runtime's own allocator, so we don't label this as
+    # "ONNX memory usage."
+    #
+    # We will add proper provider-level memory profiling later.
 
 
 if __name__ == "__main__":
