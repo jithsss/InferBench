@@ -28,8 +28,16 @@ def main() -> None:
     if device.type == "cuda":
         torch.cuda.synchronize()
 
-    # Benchmark
+    
+        # Reset peak memory statistics before benchmarking
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+
     iterations = 100
+
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+
     start = time.perf_counter()
 
     with torch.inference_mode():
@@ -44,11 +52,16 @@ def main() -> None:
     average_latency_ms = (elapsed / iterations) * 1000
     throughput_fps = iterations / elapsed
 
+    peak_memory_mb = 0.0
+
+    if device.type == "cuda":
+        peak_memory_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+
     print("\n--- PyTorch Baseline ---")
     print(f"Iterations:       {iterations}")
     print(f"Average latency:  {average_latency_ms:.3f} ms")
     print(f"Throughput:       {throughput_fps:.2f} FPS")
-
+    print(f"Peak GPU memory:  {peak_memory_mb:.2f} MB")
 
 if __name__ == "__main__":
     main()
