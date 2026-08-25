@@ -65,3 +65,22 @@ available for these images.
 | 350.jpg | 301  | 304  |
 | 354.jpg | 301  | 304  |
 | 355.jpg | 301  | 304  |
+
+## Calibration/Evaluation Split Experiment
+
+A separate calibration/evaluation split was used to reduce evaluation
+leakage.
+
+- Calibration images: 40
+- Held-out evaluation images: 10
+- Matching predictions: 9 / 10
+- Prediction agreement: 90.00%
+
+This is prediction agreement with the FP32 reference, not classification
+accuracy, because ground-truth labels are not available for these images.
+
+Mismatch:
+
+| Image   | FP32 | INT8 |
+|---------|------|------|
+| 354.jpg | 301  | 304  |

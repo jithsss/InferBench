@@ -7,8 +7,13 @@ from PIL import Image
 import tensorrt as trt
 
 
-IMAGE_DIR = Path("quantization/calibration/images")
-ENGINE_PATH = Path("export/resnet50_tensorrt_int8.engine")
+ENGINE_PATH = Path(
+    "export/resnet50_tensorrt_int8_40cal.engine"
+)
+
+IMAGE_DIR = Path(
+    "quantization/calibration/evaluation"
+)
 
 
 def preprocess(image_path: Path) -> torch.Tensor:

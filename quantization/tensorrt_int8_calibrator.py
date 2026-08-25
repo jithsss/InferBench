@@ -6,13 +6,15 @@ import torch
 from PIL import Image
 
 
-class ResNetEntropyCalibrator(trt.IInt8EntropyCalibrator2):
+class ResNetEntropyCalibrator(
+    trt.IInt8EntropyCalibrator2
+):
     def __init__(
         self,
         image_dir: str,
         input_shape: tuple[int, int, int, int],
         cache_file: str,
-        max_images: int = 50,
+        max_images: int = 40,
     ) -> None:
         super().__init__()
 
@@ -25,7 +27,7 @@ class ResNetEntropyCalibrator(trt.IInt8EntropyCalibrator2):
         )[:max_images]
 
         self.index = 0
-        self.device_input: torch.Tensor | None = None
+        self.device_input = None
 
         if not self.image_paths:
             raise RuntimeError(
@@ -34,18 +36,28 @@ class ResNetEntropyCalibrator(trt.IInt8EntropyCalibrator2):
 
         if self.batch_size != 1:
             raise ValueError(
-                "This calibrator currently expects batch size 1."
+                "This calibrator expects batch size 1."
             )
 
     @staticmethod
-    def preprocess(image_path: Path) -> np.ndarray:
-        image = Image.open(image_path).convert("RGB")
-        image = image.resize((224, 224))
+    def preprocess(
+        image_path: Path,
+    ) -> np.ndarray:
+        image = Image.open(
+            image_path
+        ).convert("RGB")
 
-        image_array = np.asarray(
-            image,
-            dtype=np.float32,
-        ) / 255.0
+        image = image.resize(
+            (224, 224)
+        )
+
+        image_array = (
+            np.asarray(
+                image,
+                dtype=np.float32,
+            )
+            / 255.0
+        )
 
         mean = np.array(
             [0.485, 0.456, 0.406],
@@ -61,13 +73,11 @@ class ResNetEntropyCalibrator(trt.IInt8EntropyCalibrator2):
             image_array - mean
         ) / std
 
-        # HWC → CHW
         image_array = np.transpose(
             image_array,
             (2, 0, 1),
         )
 
-        # Add batch dimension
         image_array = np.expand_dims(
             image_array,
             axis=0,
@@ -82,25 +92,35 @@ class ResNetEntropyCalibrator(trt.IInt8EntropyCalibrator2):
         return self.batch_size
 
     def get_batch(self, names):
-        if self.index >= len(self.image_paths):
+        if self.index >= len(
+            self.image_paths
+        ):
             return None
 
-        image_path = self.image_paths[self.index]
+        image_path = self.image_paths[
+            self.index
+        ]
 
-        batch = self.preprocess(image_path)
+        batch = self.preprocess(
+            image_path
+        )
 
         self.index += 1
 
-        self.device_input = torch.from_numpy(
-            batch
-        ).cuda()
+        self.device_input = (
+            torch.from_numpy(batch).cuda()
+        )
 
         return [
-            int(self.device_input.data_ptr())
+            int(
+                self.device_input.data_ptr()
+            )
         ]
 
     def read_calibration_cache(self):
-        cache_path = Path(self.cache_file)
+        cache_path = Path(
+            self.cache_file
+        )
 
         if cache_path.exists():
             print(
@@ -112,15 +132,22 @@ class ResNetEntropyCalibrator(trt.IInt8EntropyCalibrator2):
 
         return None
 
-    def write_calibration_cache(self, cache):
-        cache_path = Path(self.cache_file)
+    def write_calibration_cache(
+        self,
+        cache,
+    ):
+        cache_path = Path(
+            self.cache_file
+        )
 
         cache_path.parent.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        cache_path.write_bytes(cache)
+        cache_path.write_bytes(
+            cache
+        )
 
         print(
             f"Calibration cache saved to: "

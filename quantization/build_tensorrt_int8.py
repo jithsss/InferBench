@@ -11,17 +11,19 @@ ONNX_MODEL = Path(
     "export/resnet50_fp32_trt.onnx"
 )
 
-ENGINE_PATH = Path(
-    "export/resnet50_tensorrt_int8.engine"
-)
-
 CALIBRATION_IMAGES = (
-    "quantization/calibration/images"
+    "quantization/calibration/"
+    "calibration_set"
 )
 
 CALIBRATION_CACHE = (
     "quantization/calibration/"
-    "resnet50_int8.cache"
+    "resnet50_int8_40cal.cache"
+)
+
+ENGINE_PATH = Path(
+    "export/"
+    "resnet50_tensorrt_int8_40cal.engine"
 )
 
 
@@ -113,7 +115,7 @@ def main() -> None:
         image_dir=CALIBRATION_IMAGES,
         input_shape=(1, 3, 224, 224),
         cache_file=CALIBRATION_CACHE,
-        max_images=50,
+        max_images=40,
     )
 
     config.int8_calibrator = calibrator
