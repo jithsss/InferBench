@@ -160,6 +160,17 @@ def check_genai() -> bool:
         return False
 
 
+def check_whisper() -> bool:
+    try:
+        import torch
+        import torchaudio
+        import transformers
+        import jiwer
+        return True
+    except Exception:
+        return False
+
+
 def environment_report(
     benchmark_name: str,
 ) -> dict[str, bool]:
@@ -176,6 +187,12 @@ def environment_report(
             "cuda": check_cuda(),
             "onnxruntime": check_onnxruntime(),
             "onnxruntime_genai": check_genai(),
+        }
+
+    if benchmark_name.startswith("whisper-"):
+        return {
+            "cuda": check_cuda(),
+            "whisper_deps": check_whisper(),
         }
 
     return {
