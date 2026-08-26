@@ -37,6 +37,15 @@ class BenchmarkResult:
     confidence_threshold: float | None = None
     nms_settings: str | None = None
 
+    # Speech Recognition
+    audio_duration_seconds: float | None = None
+    real_time_factor: float | None = None
+    wer: float | None = None
+    cer: float | None = None
+    language: str | None = None
+    preprocessing_latency_ms: float | None = None
+    model_load_time_ms: float | None = None
+
     notes: str | None = None
 
 

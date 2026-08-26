@@ -48,7 +48,58 @@ def format_throughput(
             f"{result.tokens_per_second:.2f} tok/s"
         )
 
+    if result.model_type == "speech":
+        if result.real_time_factor is None:
+            return "-"
+        return f"{result.real_time_factor:.3f} RTF"
+
     return "-"
+
+
+def print_speech_results(
+    results: Iterable[BenchmarkResult],
+) -> None:
+    speech_results = [
+        result
+        for result in results
+        if result.model_type == "speech"
+    ]
+
+    if not speech_results:
+        return
+
+    print("\n=== SPEECH RESULTS ===")
+
+    print(
+        f"{'Model':<20}"
+        f"{'Runtime':<12}"
+        f"{'Precision':<10}"
+        f"{'Latency':>12}"
+        f"{'RTF':>10}"
+        f"{'WER':>8}"
+    )
+
+    print("-" * 72)
+
+    for result in speech_results:
+        rtf = (
+            f"{result.real_time_factor:.3f}"
+            if result.real_time_factor is not None
+            else "-"
+        )
+        wer = (
+            f"{result.wer:.2f}%"
+            if result.wer is not None
+            else "-"
+        )
+        print(
+            f"{result.model:<20}"
+            f"{result.runtime:<12}"
+            f"{result.precision:<10}"
+            f"{format_latency(result.average_latency_ms):>12}"
+            f"{rtf:>10}"
+            f"{wer:>8}"
+        )
 
 
 def print_vision_results(
@@ -253,6 +304,50 @@ def print_llm_analysis(
         )
 
 
+def print_speech_analysis(
+    results: Iterable[BenchmarkResult],
+) -> None:
+    speech_results = [
+        result
+        for result in results
+        if result.model_type == "speech"
+        and result.real_time_factor is not None
+    ]
+
+    if not speech_results:
+        return
+
+    print("\n=== SPEECH ANALYSIS ===")
+
+    for model in sorted({result.model for result in speech_results}):
+        model_results = [r for r in speech_results if r.model == model]
+
+        # For RTF, lower is better. So best is min
+        best = min(
+            model_results,
+            key=lambda result: result.real_time_factor,
+        )
+
+        print(
+            f"{model}: "
+            f"best RTF = {best.real_time_factor:.3f} "
+            f"({best.precision})"
+        )
+
+        fp32_results = [r for r in model_results if r.precision == "FP32"]
+
+        if fp32_results:
+            baseline = min(
+                fp32_results,
+                key=lambda result: result.real_time_factor,
+            )
+
+            # Speedup for RTF is (baseline / best) because lower RTF is faster
+            if best.real_time_factor > 0:
+                speedup = baseline.real_time_factor / best.real_time_factor
+                print(f"  Speedup vs FP32: {speedup:.2f}x")
+
+
 def main() -> None:
     results = load_all_results()
 
@@ -268,9 +363,11 @@ def main() -> None:
 
     print_vision_results(results)
     print_llm_results(results)
+    print_speech_results(results)
 
     print_vision_analysis(results)
     print_llm_analysis(results)
+    print_speech_analysis(results)
 
 
 if __name__ == "__main__":
