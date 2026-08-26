@@ -87,6 +87,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for profiling output",
     )
 
+    # ---------------------------------------------------------
+    # profile-whisper
+    # ---------------------------------------------------------
+
+    whisper_profile_parser = subparsers.add_parser(
+        "profile-whisper",
+        help="Profile a Whisper PyTorch model",
+    )
+
+    whisper_profile_parser.add_argument(
+        "model",
+        nargs="?",
+        default="tiny",
+        help="Whisper model size (e.g. tiny, base, small)",
+    )
+
     return parser
 
 
@@ -210,6 +226,18 @@ def handle_profile_onnx(
     return 0
 
 
+def handle_profile_whisper(
+    args: argparse.Namespace,
+) -> int:
+    from profiling import torch_profile
+    try:
+        torch_profile.profile_whisper(args.model)
+        return 0
+    except Exception as exc:
+        print(f"Error during Whisper profiling: {exc}")
+        return 1
+
+
 def main() -> int:
     parser = build_parser()
 
@@ -230,6 +258,11 @@ def main() -> int:
         return handle_profile_onnx(
             args.model,
             args.output_dir,
+        )
+
+    if args.command == "profile-whisper":
+        return handle_profile_whisper(
+            args
         )
 
     parser.error(
