@@ -108,47 +108,54 @@ st.title("Inference Performance Lab")
 st.markdown("Benchmark, optimize, profile, and compare AI inference workloads across architectures.")
 
 # Tabs
-tab_overview, tab_classification, tab_detection, tab_llm, tab_diagnostics = st.tabs(
-    ["📊 Overview", "🖼️ Classification", "🔍 Object Detection", "💬 LLM", "🛠️ Diagnostics"]
-)
+tab_overview, tab_classification, tab_detection, tab_speech, tab_llm, tab_diagnostics = st.tabs([
+    "📊 Overview", 
+    "🖼️ Classification", 
+    "🔍 Object Detection", 
+    "🎙️ Speech",
+    "💬 LLM", 
+    "🛠️ Diagnostics"
+])
 
 with tab_overview:
     st.subheader("System Overview")
     
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Benchmarks", len(filtered_df))
-    with col2:
-        st.metric("Unique Models", filtered_df["model"].nunique())
-    with col3:
-        st.metric("Vision Runs", len(filtered_df[filtered_df["model_type"] == "vision"]))
-    with col4:
-        st.metric("LLM Runs", len(filtered_df[filtered_df["model_type"] == "llm"]))
+    cc1, cc2, cc3, cc4, cc5 = st.columns(5)
+    cc1.metric("Total Benchmarks", len(filtered_df))
+    cc2.metric("Unique Models", filtered_df["model"].nunique())
+    cc3.metric("Vision Runs", len(filtered_df[filtered_df["model_type"] == "vision"]))
+    cc4.metric("LLM Runs", len(filtered_df[filtered_df["model_type"] == "llm"]))
+    cc5.metric("Speech Runs", len(filtered_df[filtered_df["model_type"] == "speech"]))
 
     st.subheader("🏆 Top Performance")
     
-    c_df = filtered_df[filtered_df["task"] != "object_detection"]
-    c_df = c_df[c_df["model_type"] == "vision"].dropna(subset=["throughput"])
-    
-    d_df = filtered_df[filtered_df["task"] == "object_detection"].dropna(subset=["throughput"])
+    c_df = filtered_df[(filtered_df["model_type"] == "vision") & (filtered_df["task"] != "object_detection")].dropna(subset=["throughput"])
+    d_df = filtered_df[(filtered_df["model_type"] == "vision") & (filtered_df["task"] == "object_detection")].dropna(subset=["throughput"])
     
     l_df = filtered_df[filtered_df["model_type"] == "llm"].dropna(subset=["tokens_per_second"])
+    
+    s_df = filtered_df[filtered_df["model_type"] == "speech"].dropna(subset=["real_time_factor"])
 
     active_sections = []
     
     if not c_df.empty:
-        active_sections.append(("Classification", c_df, "throughput", "Fastest Classification", " FPS"))
+        active_sections.append(("Classification", c_df, "throughput", "Fastest Classification", " FPS", True))
     if not d_df.empty:
-        active_sections.append(("Detection", d_df, "throughput", "Fastest Object Detection", " FPS"))
+        active_sections.append(("Detection", d_df, "throughput", "Fastest Object Detection", " FPS", True))
     if not l_df.empty:
-        active_sections.append(("LLM", l_df, "tokens_per_second", "Fastest LLM Generation", " tok/s"))
+        active_sections.append(("LLM", l_df, "tokens_per_second", "Fastest LLM Generation", " tok/s", True))
+    if not s_df.empty:
+        active_sections.append(("Speech", s_df, "real_time_factor", "Fastest Speech (RTF)", " RTF", False))
 
     if active_sections:
         cols = st.columns(len(active_sections))
-        for col, (sec_name, sec_df, sec_metric, sec_title, sec_unit) in zip(cols, active_sections):
+        for col, (sec_name, sec_df, sec_metric, sec_title, sec_unit, higher_is_better) in zip(cols, active_sections):
             with col:
-                best = sec_df.loc[sec_df[sec_metric].idxmax()]
-                st.metric(sec_title, f'{best[sec_metric]:.1f}{sec_unit}', f'{best["model"]} ({best["precision"]})')
+                if higher_is_better:
+                    best = sec_df.loc[sec_df[sec_metric].idxmax()]
+                else:
+                    best = sec_df.loc[sec_df[sec_metric].idxmin()]
+                st.metric(sec_title, f'{best[sec_metric]:.3f}{sec_unit}', f'{best["model"]} ({best["precision"]})')
     else:
         st.info("No performance data available for the current filters.")
 
@@ -157,8 +164,20 @@ with tab_overview:
         st.subheader("⏱️ Recent Runs")
         recent_df = pd.DataFrame(history).tail(8).copy()
         
-        display_cols = {"timestamp": "Time", "model": "Model", "runtime": "Runtime", "precision": "Precision", "throughput": "FPS", "tokens_per_second": "Tok/s", "average_latency_ms": "Latency (ms)"}
-        recent_df = recent_df.rename(columns={k:v for k,v in display_cols.items() if k in recent_df.columns})
+        display_cols = {
+            "timestamp": "Time", 
+            "model": "Model", 
+            "model_type": "Type",
+            "runtime": "Runtime", 
+            "precision": "Precision", 
+            "average_latency_ms": "Latency (ms)",
+            "throughput": "FPS", 
+            "tokens_per_second": "Tok/s", 
+            "real_time_factor": "RTF"
+        }
+        
+        cols_to_keep = [c for c in display_cols.keys() if c in recent_df.columns]
+        recent_df = recent_df[cols_to_keep].rename(columns=display_cols)
         
         st.dataframe(
             recent_df, 
@@ -167,6 +186,7 @@ with tab_overview:
             column_config={
                 "FPS": st.column_config.NumberColumn(format="%.1f"),
                 "Tok/s": st.column_config.NumberColumn(format="%.1f"),
+                "RTF": st.column_config.NumberColumn(format="%.3f"),
                 "Latency (ms)": st.column_config.NumberColumn(format="%.2f"),
                 "Time": st.column_config.DatetimeColumn(format="h:mm a - MMM D, YYYY")
             }
@@ -290,6 +310,45 @@ with tab_llm:
         st.markdown("**Throughput by Precision**")
         throughput_df = llm_df.groupby("precision", as_index=True)["tokens_per_second"].max()
         if not throughput_df.empty: st.bar_chart(throughput_df, color="#10b981")
+
+with tab_speech:
+    speech_df = filtered_df[filtered_df["model_type"] == "speech"].copy()
+    if speech_df.empty:
+        st.info("No Speech recognition results match the current filters.")
+    else:
+        st.subheader("🎙️ Speech Recognition")
+        measurable = speech_df.dropna(subset=["real_time_factor"])
+        best = measurable.loc[measurable["real_time_factor"].idxmin()] if not measurable.empty else None
+        
+        lc1, lc2, lc3, lc4 = st.columns(4)
+        with lc1:
+            st.metric("Fastest RTF", f'{best["real_time_factor"]:.3f}' if best is not None else "N/A", best["precision"] if best is not None else None, delta_color="inverse")
+        with lc2:
+            st.metric("Audio Duration", f'{best["audio_duration_seconds"]:.1f} s' if best is not None else "N/A")
+        with lc3:
+            st.metric("Best WER", f'{best["wer"]:.2f}%' if best is not None else "N/A", delta_color="inverse")
+        with lc4:
+            st.metric("Total Latency", f'{best["average_latency_ms"]:.1f} ms' if best is not None else "N/A", delta_color="inverse")
+
+        st.subheader("🔍 Configuration Comparison")
+        table = speech_df[["model", "runtime", "precision", "average_latency_ms", "real_time_factor", "wer", "cer", "audio_duration_seconds"]].copy()
+        table.columns = ["Model", "Runtime", "Precision", "Latency (ms)", "RTF", "WER (%)", "CER (%)", "Audio Duration (s)"]
+        
+        st.dataframe(
+            table, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Latency (ms)": st.column_config.NumberColumn(format="%.2f"),
+                "RTF": st.column_config.ProgressColumn(format="%.3f", min_value=0, max_value=float(table["RTF"].max())),
+                "WER (%)": st.column_config.NumberColumn(format="%.2f%%"),
+                "CER (%)": st.column_config.NumberColumn(format="%.2f%%"),
+            }
+        )
+
+        st.markdown("**Real Time Factor by Precision (Lower is better)**")
+        rtf_df = speech_df.groupby("precision", as_index=True)["real_time_factor"].min()
+        if not rtf_df.empty: st.bar_chart(rtf_df, color="#8b5cf6")
 
 with tab_diagnostics:
     st.subheader("🛠️ Profiling Diagnostics")
