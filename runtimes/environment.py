@@ -164,9 +164,7 @@ def environment_report(
     benchmark_name: str,
 ) -> dict[str, bool]:
 
-    if benchmark_name.startswith(
-        "resnet50-tensorrt"
-    ):
+    if benchmark_name.startswith("resnet50-tensorrt") or benchmark_name.startswith("yolov8n-tensorrt"):
         return {
             "cuda": check_cuda(),
             "onnxruntime": check_onnxruntime(),

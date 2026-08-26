@@ -4,7 +4,8 @@ InferBench is an AI inference benchmarking and profiling framework. It evaluates
 
 ## Features
 
-- **Benchmarking**: Measure average, P50, P95, and P99 latencies, along with throughput (Tokens/sec or FPS) for both Large Language Models (LLMs) and Vision models.
+- **Benchmarking**: Measure average, P50, P95, and P99 latencies, along with throughput (Tokens/sec or FPS) for Large Language Models (LLMs), Image Classification, and Object Detection (YOLO).
+- **YOLO Quality Validation**: Object detection quality is measured via a robust prediction agreement metric comparing FP32 vs. optimized TensorRT outputs, ensuring high-fidelity INT8 engines without requiring massive labeled datasets.
 - **Profiling**: Profile ONNX models to identify performance bottlenecks, such as implicit CPU fallbacks and inefficient host-to-device memory copies (`Memcpy`).
 - **Standardized Reporting**: Save and compare benchmark results using a unified JSON schema.
 

@@ -28,6 +28,15 @@ class BenchmarkResult:
     accuracy_metric: str | None = None
     accuracy_value: float | None = None
 
+    task: str | None = None
+    input_resolution: str | None = None
+    mAP50: float | None = None
+    mAP50_95: float | None = None
+    prediction_agreement: float | None = None
+    num_detections: int | None = None
+    confidence_threshold: float | None = None
+    nms_settings: str | None = None
+
     notes: str | None = None
 
 

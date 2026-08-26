@@ -24,3 +24,21 @@ register_benchmark(
     "Qwen3-0.6B ONNX Runtime GenAI benchmark",
     "benchmarks.qwen3_benchmark",
 )
+
+register_benchmark(
+    "yolov8n-tensorrt-fp32",
+    "YOLOv8n TensorRT FP32 benchmark",
+    "benchmarks.yolo_tensorrt_fp32_benchmark",
+)
+
+register_benchmark(
+    "yolov8n-tensorrt-fp16",
+    "YOLOv8n TensorRT FP16 benchmark",
+    "benchmarks.yolo_tensorrt_fp16_benchmark",
+)
+
+register_benchmark(
+    "yolov8n-tensorrt-int8",
+    "YOLOv8n TensorRT INT8 benchmark",
+    "benchmarks.yolo_tensorrt_int8_benchmark",
+)
