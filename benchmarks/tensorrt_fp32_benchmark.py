@@ -8,9 +8,12 @@ from benchmarks.benchmark_utils import (
     calculate_statistics,
     print_results,
 )
+from benchmarks.result_schema import BenchmarkResult
+from benchmarks.result_writer import save_benchmark_result
 
 
 MODEL_PATH = "export/resnet50_fp32.onnx"
+RESULT_PATH = "results/vision/resnet50_tensorrt_fp32.json"
 
 
 def main() -> None:
@@ -30,6 +33,11 @@ def main() -> None:
     print("Model:", MODEL_PATH)
     print("Active providers:", session.get_providers())
 
+    if session.get_providers()[0] != "TensorrtExecutionProvider":
+        raise RuntimeError(
+            "TensorRT is not the active execution provider."
+        )
+
     batch_size = 1
 
     np.random.seed(42)
@@ -44,7 +52,6 @@ def main() -> None:
     input_name = session.get_inputs()[0].name
     output_name = session.get_outputs()[0].name
 
-    # Warm-up
     for _ in range(20):
         session.run(
             [output_name],
@@ -53,7 +60,6 @@ def main() -> None:
 
     latencies_ms: list[float] = []
 
-    # Benchmark
     for _ in range(100):
         start = time.perf_counter()
 
@@ -70,6 +76,31 @@ def main() -> None:
     result = calculate_statistics(latencies_ms)
 
     print_results(result)
+
+    benchmark_result = BenchmarkResult(
+        model="ResNet50",
+        model_type="vision",
+        runtime="TensorRT",
+        execution_provider="TensorRT",
+        precision="FP32",
+        batch_size=batch_size,
+        average_latency_ms=result.average_latency_ms,
+        p50_latency_ms=result.p50_latency_ms,
+        p95_latency_ms=result.p95_latency_ms,
+        p99_latency_ms=result.p99_latency_ms,
+        throughput=result.throughput_fps,
+        throughput_unit="FPS",
+        notes=(
+            "TensorRT FP32 using the ONNX Runtime "
+            "TensorRT Execution Provider. "
+            "20 warm-up runs and 100 benchmark runs."
+        ),
+    )
+
+    save_benchmark_result(
+        benchmark_result,
+        RESULT_PATH,
+    )
 
 
 if __name__ == "__main__":

@@ -3,6 +3,9 @@ import time
 
 import onnxruntime_genai as og
 
+from benchmarks.result_schema import BenchmarkResult
+from benchmarks.result_writer import save_benchmark_result
+
 
 MODEL_PATH = "models/qwen3-0.6b"
 
@@ -14,6 +17,10 @@ PROMPT = (
 MAX_NEW_TOKENS = 128
 WARMUP_RUNS = 2
 BENCHMARK_RUNS = 5
+
+RESULT_PATH = (
+    "results/llm/qwen3_0.6b_baseline.json"
+)
 
 
 def percentile(values: list[float], p: float) -> float:
@@ -47,6 +54,7 @@ def create_generator(
     )
 
     generator = og.Generator(model, params)
+
     return generator
 
 
@@ -59,10 +67,7 @@ def run_generation(
         input_tokens,
     )
 
-    # ---------------------------------------------------------
     # Prompt processing
-    # ---------------------------------------------------------
-
     prompt_start = time.perf_counter()
 
     generator.append_tokens(input_tokens)
@@ -75,10 +80,7 @@ def run_generation(
 
     prompt_token_count = generator.token_count()
 
-    # ---------------------------------------------------------
-    # First token / sampling
-    # ---------------------------------------------------------
-
+    # First token
     sampling_start = time.perf_counter()
 
     generator.generate_next_token()
@@ -93,10 +95,7 @@ def run_generation(
         prompt_processing_ms + sampling_ms
     )
 
-    # ---------------------------------------------------------
-    # Remaining token generation
-    # ---------------------------------------------------------
-
+    # Remaining tokens
     token_times = []
 
     while not generator.is_done():
@@ -112,10 +111,8 @@ def run_generation(
 
     sequence = generator.get_sequence(0)
 
-    total_tokens = len(sequence)
-
     generated_tokens = (
-        total_tokens - prompt_token_count
+        len(sequence) - prompt_token_count
     )
 
     if generated_tokens <= 0:
@@ -123,8 +120,6 @@ def run_generation(
             "No generated tokens."
         )
 
-    # The first token was generated during sampling.
-    # Subsequent token timings are stored in token_times.
     subsequent_tokens = max(
         generated_tokens - 1,
         1,
@@ -132,13 +127,13 @@ def run_generation(
 
     generation_time_s = sum(token_times)
 
-    generation_tokens_per_sec = (
+    tokens_per_second = (
         subsequent_tokens / generation_time_s
         if generation_time_s > 0
         else 0.0
     )
 
-    total_start_to_finish_ms = (
+    total_latency_ms = (
         prompt_processing_ms
         + sampling_ms
         + generation_time_s * 1000.0
@@ -146,34 +141,9 @@ def run_generation(
 
     return (
         ttft_ms,
-        generation_tokens_per_sec,
-        total_start_to_finish_ms,
+        tokens_per_second,
+        total_latency_ms,
         generated_tokens,
-    )
-
-
-def print_stats(
-    name: str,
-    values: list[float],
-    unit: str,
-) -> None:
-    print(f"\n{name}")
-    print("-" * len(name))
-
-    print(
-        f"Average: {statistics.mean(values):.2f} {unit}"
-    )
-
-    print(
-        f"P50:     {percentile(values, 50):.2f} {unit}"
-    )
-
-    print(
-        f"P95:     {percentile(values, 95):.2f} {unit}"
-    )
-
-    print(
-        f"P99:     {percentile(values, 99):.2f} {unit}"
     )
 
 
@@ -197,10 +167,7 @@ def main() -> None:
         f"Prompt tokens: {len(input_tokens)}"
     )
 
-    # ---------------------------------------------------------
     # Warm-up
-    # ---------------------------------------------------------
-
     print(
         f"Running {WARMUP_RUNS} warm-up runs..."
     )
@@ -211,22 +178,17 @@ def main() -> None:
             input_tokens,
         )
 
-    # ---------------------------------------------------------
     # Benchmark
-    # ---------------------------------------------------------
-
     print(
         f"Running {BENCHMARK_RUNS} benchmark runs..."
     )
 
-    ttft_values = []
-    throughput_values = []
-    total_latency_values = []
-    generated_token_counts = []
+    ttft_values: list[float] = []
+    throughput_values: list[float] = []
+    latency_values: list[float] = []
+    token_counts: list[int] = []
 
-    for run_index in range(
-        BENCHMARK_RUNS
-    ):
+    for run_index in range(BENCHMARK_RUNS):
         (
             ttft_ms,
             tokens_per_second,
@@ -238,15 +200,9 @@ def main() -> None:
         )
 
         ttft_values.append(ttft_ms)
-        throughput_values.append(
-            tokens_per_second
-        )
-        total_latency_values.append(
-            total_latency_ms
-        )
-        generated_token_counts.append(
-            generated_tokens
-        )
+        throughput_values.append(tokens_per_second)
+        latency_values.append(total_latency_ms)
+        token_counts.append(generated_tokens)
 
         print(
             f"Run {run_index + 1}: "
@@ -255,9 +211,16 @@ def main() -> None:
             f"Total={total_latency_ms:.2f} ms"
         )
 
-    # ---------------------------------------------------------
-    # Results
-    # ---------------------------------------------------------
+    average_ttft = statistics.mean(ttft_values)
+    average_tokens_per_second = statistics.mean(
+        throughput_values
+    )
+    average_latency = statistics.mean(
+        latency_values
+    )
+    average_generated_tokens = statistics.mean(
+        token_counts
+    )
 
     print("\n=== Qwen3-0.6B Benchmark ===")
 
@@ -268,25 +231,93 @@ def main() -> None:
 
     print(
         f"Generated tokens: "
-        f"{statistics.mean(generated_token_counts):.0f}"
+        f"{average_generated_tokens:.0f}"
     )
 
-    print_stats(
-        "Time to First Token",
-        ttft_values,
-        "ms",
+    print("\nTime to First Token")
+    print("-------------------")
+    print(
+        f"Average: {average_ttft:.2f} ms"
+    )
+    print(
+        f"P50:     {percentile(ttft_values, 50):.2f} ms"
+    )
+    print(
+        f"P95:     {percentile(ttft_values, 95):.2f} ms"
+    )
+    print(
+        f"P99:     {percentile(ttft_values, 99):.2f} ms"
     )
 
-    print_stats(
-        "Generation Throughput",
-        throughput_values,
-        "tokens/sec",
+    print("\nGeneration Throughput")
+    print("---------------------")
+    print(
+        f"Average: "
+        f"{average_tokens_per_second:.2f} tokens/sec"
+    )
+    print(
+        f"P50: "
+        f"{percentile(throughput_values, 50):.2f} tokens/sec"
+    )
+    print(
+        f"P95: "
+        f"{percentile(throughput_values, 95):.2f} tokens/sec"
+    )
+    print(
+        f"P99: "
+        f"{percentile(throughput_values, 99):.2f} tokens/sec"
     )
 
-    print_stats(
-        "Total Generation Latency",
-        total_latency_values,
-        "ms",
+    print("\nTotal Generation Latency")
+    print("------------------------")
+    print(
+        f"Average: {average_latency:.2f} ms"
+    )
+    print(
+        f"P50:     "
+        f"{percentile(latency_values, 50):.2f} ms"
+    )
+    print(
+        f"P95:     "
+        f"{percentile(latency_values, 95):.2f} ms"
+    )
+    print(
+        f"P99:     "
+        f"{percentile(latency_values, 99):.2f} ms"
+    )
+
+    # Save unified result
+    benchmark_result = BenchmarkResult(
+        model="Qwen3-0.6B",
+        model_type="llm",
+        runtime="ONNX Runtime GenAI",
+        execution_provider="CUDA",
+        precision="Q4F16",
+        batch_size=1,
+        ttft_ms=average_ttft,
+        tokens_per_second=average_tokens_per_second,
+        average_latency_ms=average_latency,
+        p50_latency_ms=percentile(
+            latency_values,
+            50,
+        ),
+        p95_latency_ms=percentile(
+            latency_values,
+            95,
+        ),
+        p99_latency_ms=percentile(
+            latency_values,
+            99,
+        ),
+        notes=(
+            "16-token prompt, 128 generated tokens, "
+            "2 warm-up runs, 5 benchmark runs."
+        ),
+    )
+
+    save_benchmark_result(
+        benchmark_result,
+        RESULT_PATH,
     )
 
 

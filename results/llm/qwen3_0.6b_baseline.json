@@ -1,0 +1,20 @@
+{
+  "model": "Qwen3-0.6B",
+  "model_type": "llm",
+  "runtime": "ONNX Runtime GenAI",
+  "execution_provider": "CUDA",
+  "precision": "Q4F16",
+  "batch_size": 1,
+  "average_latency_ms": 561.9467600005919,
+  "p50_latency_ms": 564.5534000041152,
+  "p95_latency_ms": 574.4313600011992,
+  "p99_latency_ms": 575.942112001303,
+  "throughput": null,
+  "throughput_unit": null,
+  "ttft_ms": 6.908739999926183,
+  "tokens_per_second": 228.90091697869596,
+  "peak_memory_mb": null,
+  "accuracy_metric": null,
+  "accuracy_value": null,
+  "notes": "16-token prompt, 128 generated tokens, 2 warm-up runs, 5 benchmark runs."
+}

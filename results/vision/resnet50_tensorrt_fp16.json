@@ -1,0 +1,20 @@
+{
+  "model": "ResNet50",
+  "model_type": "vision",
+  "runtime": "TensorRT",
+  "execution_provider": "TensorRT",
+  "precision": "FP16",
+  "batch_size": 1,
+  "average_latency_ms": 1.1081950000243523,
+  "p50_latency_ms": 1.1727999999493477,
+  "p95_latency_ms": 1.243250000129592,
+  "p99_latency_ms": 1.2933039998188178,
+  "throughput": 902.3682654930091,
+  "throughput_unit": "FPS",
+  "ttft_ms": null,
+  "tokens_per_second": null,
+  "peak_memory_mb": null,
+  "accuracy_metric": null,
+  "accuracy_value": null,
+  "notes": "TensorRT FP16 enabled through the ONNX Runtime TensorRT Execution Provider. 20 warm-up runs and 100 measured runs."
+}

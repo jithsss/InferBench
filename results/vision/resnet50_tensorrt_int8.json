@@ -1,0 +1,20 @@
+{
+  "model": "ResNet50",
+  "model_type": "vision",
+  "runtime": "TensorRT",
+  "execution_provider": "TensorRT",
+  "precision": "INT8",
+  "batch_size": 1,
+  "average_latency_ms": 0.5836649999719157,
+  "p50_latency_ms": 0.5750499999521708,
+  "p95_latency_ms": 0.6367899997712811,
+  "p99_latency_ms": 0.766559000321651,
+  "throughput": 1713.3115743587798,
+  "throughput_unit": "FPS",
+  "ttft_ms": null,
+  "tokens_per_second": null,
+  "peak_memory_mb": null,
+  "accuracy_metric": "FP32 prediction agreement",
+  "accuracy_value": 90.0,
+  "notes": "Direct TensorRT INT8 engine benchmark. 40 images were used for calibration and 10 held-out images for prediction agreement. The 90% value is prediction agreement, not ground-truth classification accuracy."
+}

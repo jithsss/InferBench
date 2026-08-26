@@ -8,9 +8,12 @@ from benchmarks.benchmark_utils import (
     calculate_statistics,
     print_results,
 )
+from benchmarks.result_schema import BenchmarkResult
+from benchmarks.result_writer import save_benchmark_result
 
 
 MODEL_PATH = "export/resnet50_fp32.onnx"
+RESULT_PATH = "results/vision/resnet50_tensorrt_fp16.json"
 
 
 def main() -> None:
@@ -61,7 +64,6 @@ def main() -> None:
 
     latencies_ms: list[float] = []
 
-    # Benchmark
     for _ in range(100):
         start = time.perf_counter()
 
@@ -75,9 +77,36 @@ def main() -> None:
         elapsed = time.perf_counter() - start
         latencies_ms.append(elapsed * 1000)
 
-    result = calculate_statistics(latencies_ms)
+    result = calculate_statistics(
+        latencies_ms
+    )
 
     print_results(result)
+
+    benchmark_result = BenchmarkResult(
+        model="ResNet50",
+        model_type="vision",
+        runtime="TensorRT",
+        execution_provider="TensorRT",
+        precision="FP16",
+        batch_size=batch_size,
+        average_latency_ms=result.average_latency_ms,
+        p50_latency_ms=result.p50_latency_ms,
+        p95_latency_ms=result.p95_latency_ms,
+        p99_latency_ms=result.p99_latency_ms,
+        throughput=result.throughput_fps,
+        throughput_unit="FPS",
+        notes=(
+            "TensorRT FP16 enabled through the "
+            "ONNX Runtime TensorRT Execution Provider. "
+            "20 warm-up runs and 100 measured runs."
+        ),
+    )
+
+    save_benchmark_result(
+        benchmark_result,
+        RESULT_PATH,
+    )
 
 
 if __name__ == "__main__":

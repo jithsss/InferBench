@@ -1,0 +1,20 @@
+{
+  "model": "ResNet50",
+  "model_type": "vision",
+  "runtime": "TensorRT",
+  "execution_provider": "TensorRT",
+  "precision": "FP32",
+  "batch_size": 1,
+  "average_latency_ms": 2.000129000011839,
+  "p50_latency_ms": 1.9723000000340107,
+  "p95_latency_ms": 2.135970000153975,
+  "p99_latency_ms": 2.48443800001951,
+  "throughput": 499.96775207703155,
+  "throughput_unit": "FPS",
+  "ttft_ms": null,
+  "tokens_per_second": null,
+  "peak_memory_mb": null,
+  "accuracy_metric": null,
+  "accuracy_value": null,
+  "notes": "TensorRT FP32 using the ONNX Runtime TensorRT Execution Provider. 20 warm-up runs and 100 benchmark runs."
+}

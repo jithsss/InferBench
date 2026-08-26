@@ -1,7 +1,6 @@
 import time
 from pathlib import Path
 
-import numpy as np
 import torch
 import tensorrt as trt
 
@@ -9,21 +8,35 @@ from benchmarks.benchmark_utils import (
     calculate_statistics,
     print_results,
 )
+from benchmarks.result_schema import BenchmarkResult
+from benchmarks.result_writer import save_benchmark_result
 
 
 ENGINE_PATH = Path(
     "export/resnet50_tensorrt_int8.engine"
 )
 
+RESULT_PATH = (
+    "results/vision/"
+    "resnet50_tensorrt_int8.json"
+)
+
 
 def main() -> None:
-    logger = trt.Logger(trt.Logger.ERROR)
-
     print("TensorRT:", trt.__version__)
-    print("CUDA available:", torch.cuda.is_available())
-    print("GPU:", torch.cuda.get_device_name(0))
+    print(
+        "CUDA available:",
+        torch.cuda.is_available(),
+    )
+    print(
+        "GPU:",
+        torch.cuda.get_device_name(0),
+    )
 
-    # Load serialized TensorRT engine.
+    logger = trt.Logger(
+        trt.Logger.ERROR
+    )
+
     runtime = trt.Runtime(logger)
 
     engine_data = ENGINE_PATH.read_bytes()
@@ -34,10 +47,8 @@ def main() -> None:
 
     if engine is None:
         raise RuntimeError(
-            "Failed to deserialize TensorRT engine."
+            "Failed to deserialize TensorRT INT8 engine."
         )
-
-    print("Engine:", ENGINE_PATH)
 
     context = engine.create_execution_context()
 
@@ -46,7 +57,6 @@ def main() -> None:
             "Failed to create TensorRT execution context."
         )
 
-    # Find input/output tensors.
     input_name = None
     output_name = None
 
@@ -56,34 +66,41 @@ def main() -> None:
 
         if mode == trt.TensorIOMode.INPUT:
             input_name = name
-        else:
+        elif mode == trt.TensorIOMode.OUTPUT:
             output_name = name
 
     if input_name is None or output_name is None:
         raise RuntimeError(
-            "Could not identify engine input/output."
+            "Unable to identify TensorRT input/output."
         )
 
-    print("Input:", input_name)
-    print("Output:", output_name)
+    batch_size = 1
 
-    # Batch 1 benchmark shape.
-    input_shape = (1, 3, 224, 224)
+    input_shape = (
+        batch_size,
+        3,
+        224,
+        224,
+    )
 
     context.set_input_shape(
         input_name,
         input_shape,
     )
 
-    # TensorRT tells us the actual output shape.
     output_shape = context.get_tensor_shape(
         output_name
     )
 
+    print("Engine:", ENGINE_PATH)
+    print("Input:", input_name)
+    print("Output:", output_name)
     print("Input shape:", input_shape)
-    print("Output shape:", tuple(output_shape))
+    print(
+        "Output shape:",
+        tuple(output_shape),
+    )
 
-    # Allocate GPU tensors using PyTorch.
     input_tensor = torch.randn(
         input_shape,
         dtype=torch.float32,
@@ -96,7 +113,6 @@ def main() -> None:
         device="cuda",
     )
 
-    # Tell TensorRT where tensors live.
     context.set_tensor_address(
         input_name,
         input_tensor.data_ptr(),
@@ -107,15 +123,15 @@ def main() -> None:
         output_tensor.data_ptr(),
     )
 
-    stream = torch.cuda.current_stream().cuda_stream
+    stream = (
+        torch.cuda.current_stream().cuda_stream
+    )
 
-    # Warm-up.
     for _ in range(20):
         context.execute_async_v3(stream)
 
     torch.cuda.synchronize()
 
-    # Benchmark.
     latencies_ms: list[float] = []
 
     for _ in range(100):
@@ -127,7 +143,9 @@ def main() -> None:
 
         torch.cuda.synchronize()
 
-        elapsed = time.perf_counter() - start
+        elapsed = (
+            time.perf_counter() - start
+        )
 
         latencies_ms.append(
             elapsed * 1000
@@ -139,10 +157,33 @@ def main() -> None:
 
     print_results(result)
 
-    # Report memory allocated by PyTorch.
-    print(
-        f"Peak GPU memory:  "
-        f"{torch.cuda.max_memory_allocated() / (1024 ** 2):.2f} MB"
+    benchmark_result = BenchmarkResult(
+        model="ResNet50",
+        model_type="vision",
+        runtime="TensorRT",
+        execution_provider="TensorRT",
+        precision="INT8",
+        batch_size=batch_size,
+        average_latency_ms=result.average_latency_ms,
+        p50_latency_ms=result.p50_latency_ms,
+        p95_latency_ms=result.p95_latency_ms,
+        p99_latency_ms=result.p99_latency_ms,
+        throughput=result.throughput_fps,
+        throughput_unit="FPS",
+        accuracy_metric="FP32 prediction agreement",
+        accuracy_value=90.0,
+        notes=(
+            "Direct TensorRT INT8 engine benchmark. "
+            "40 images were used for calibration and "
+            "10 held-out images for prediction agreement. "
+            "The 90% value is prediction agreement, "
+            "not ground-truth classification accuracy."
+        ),
+    )
+
+    save_benchmark_result(
+        benchmark_result,
+        RESULT_PATH,
     )
 
 
