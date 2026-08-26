@@ -1,3 +1,4 @@
+import statistics
 import time
 
 import onnxruntime_genai as og
@@ -11,27 +12,33 @@ PROMPT = (
 )
 
 MAX_NEW_TOKENS = 128
+WARMUP_RUNS = 2
+BENCHMARK_RUNS = 5
 
 
-def main() -> None:
-    print("Loading Qwen3-0.6B...")
+def percentile(values: list[float], p: float) -> float:
+    values = sorted(values)
 
-    config = og.Config(MODEL_PATH)
+    if len(values) == 1:
+        return values[0]
 
-    # Explicitly select CUDA.
-    config.clear_providers()
-    config.append_provider("cuda")
+    position = (len(values) - 1) * p / 100.0
 
-    print("Execution provider: CUDA")
+    lower = int(position)
+    upper = min(lower + 1, len(values) - 1)
 
-    model = og.Model(config)
-    tokenizer = og.Tokenizer(model)
+    weight = position - lower
 
-    print("Model loaded successfully.")
+    return (
+        values[lower]
+        + (values[upper] - values[lower]) * weight
+    )
 
-    # Tokenize prompt.
-    input_tokens = tokenizer.encode(PROMPT)
 
+def create_generator(
+    model: og.Model,
+    input_tokens,
+) -> og.Generator:
     params = og.GeneratorParams(model)
 
     params.set_search_options(
@@ -39,45 +46,73 @@ def main() -> None:
         do_sample=False,
     )
 
-    generator = og.Generator(
+    generator = og.Generator(model, params)
+    return generator
+
+
+def run_generation(
+    model: og.Model,
+    input_tokens,
+) -> tuple[float, float, float, int]:
+    generator = create_generator(
         model,
-        params,
+        input_tokens,
     )
 
-    # Add the prompt to the generator.
+    # ---------------------------------------------------------
+    # Prompt processing
+    # ---------------------------------------------------------
+
+    prompt_start = time.perf_counter()
+
     generator.append_tokens(input_tokens)
+
+    prompt_end = time.perf_counter()
+
+    prompt_processing_ms = (
+        prompt_end - prompt_start
+    ) * 1000.0
 
     prompt_token_count = generator.token_count()
 
-    print(
-        f"Prompt tokens: {prompt_token_count}"
-    )
-
     # ---------------------------------------------------------
-    # First token / TTFT
+    # First token / sampling
     # ---------------------------------------------------------
 
-    start_time = time.perf_counter()
+    sampling_start = time.perf_counter()
 
     generator.generate_next_token()
 
-    first_token_time = time.perf_counter()
+    sampling_end = time.perf_counter()
 
-    first_token = generator.get_next_tokens()[0]
+    sampling_ms = (
+        sampling_end - sampling_start
+    ) * 1000.0
+
+    ttft_ms = (
+        prompt_processing_ms + sampling_ms
+    )
 
     # ---------------------------------------------------------
-    # Generate the remaining tokens
+    # Remaining token generation
     # ---------------------------------------------------------
+
+    token_times = []
 
     while not generator.is_done():
+        token_start = time.perf_counter()
+
         generator.generate_next_token()
 
-    end_time = time.perf_counter()
+        token_end = time.perf_counter()
 
-    # Total sequence includes prompt + generated tokens.
-    total_tokens = len(
-        generator.get_sequence(0)
-    )
+        token_times.append(
+            token_end - token_start
+        )
+
+    sequence = generator.get_sequence(0)
+
+    total_tokens = len(sequence)
 
     generated_tokens = (
         total_tokens - prompt_token_count
@@ -85,70 +120,174 @@ def main() -> None:
 
     if generated_tokens <= 0:
         raise RuntimeError(
-            "No generated tokens were produced."
+            "No generated tokens."
         )
 
-    ttft_ms = (
-        first_token_time - start_time
-    ) * 1000
-
-    generation_time_s = (
-        end_time - first_token_time
+    # The first token was generated during sampling.
+    # Subsequent token timings are stored in token_times.
+    subsequent_tokens = max(
+        generated_tokens - 1,
+        1,
     )
 
-    # We already generated the first token before
-    # measuring generation_time_s, so include it.
-    tokens_per_second = (
-        generated_tokens
-        / (end_time - start_time)
+    generation_time_s = sum(token_times)
+
+    generation_tokens_per_sec = (
+        subsequent_tokens / generation_time_s
+        if generation_time_s > 0
+        else 0.0
     )
 
-    total_latency_ms = (
-        end_time - start_time
-    ) * 1000
+    total_start_to_finish_ms = (
+        prompt_processing_ms
+        + sampling_ms
+        + generation_time_s * 1000.0
+    )
+
+    return (
+        ttft_ms,
+        generation_tokens_per_sec,
+        total_start_to_finish_ms,
+        generated_tokens,
+    )
+
+
+def print_stats(
+    name: str,
+    values: list[float],
+    unit: str,
+) -> None:
+    print(f"\n{name}")
+    print("-" * len(name))
+
+    print(
+        f"Average: {statistics.mean(values):.2f} {unit}"
+    )
+
+    print(
+        f"P50:     {percentile(values, 50):.2f} {unit}"
+    )
+
+    print(
+        f"P95:     {percentile(values, 95):.2f} {unit}"
+    )
+
+    print(
+        f"P99:     {percentile(values, 99):.2f} {unit}"
+    )
+
+
+def main() -> None:
+    print("Loading Qwen3-0.6B...")
+
+    config = og.Config(MODEL_PATH)
+
+    config.clear_providers()
+    config.append_provider("cuda")
+
+    model = og.Model(config)
+    tokenizer = og.Tokenizer(model)
+
+    print("Model loaded successfully.")
+    print("Execution provider: CUDA")
+
+    input_tokens = tokenizer.encode(PROMPT)
+
+    print(
+        f"Prompt tokens: {len(input_tokens)}"
+    )
 
     # ---------------------------------------------------------
-    # Decode output
+    # Warm-up
     # ---------------------------------------------------------
 
-    output_tokens = generator.get_sequence(0)
-
-    output_text = tokenizer.decode(
-        output_tokens
+    print(
+        f"Running {WARMUP_RUNS} warm-up runs..."
     )
 
-    print("\n--- Qwen3-0.6B Benchmark ---")
+    for _ in range(WARMUP_RUNS):
+        run_generation(
+            model,
+            input_tokens,
+        )
+
+    # ---------------------------------------------------------
+    # Benchmark
+    # ---------------------------------------------------------
 
     print(
-        f"Prompt tokens:       {prompt_token_count}"
+        f"Running {BENCHMARK_RUNS} benchmark runs..."
+    )
+
+    ttft_values = []
+    throughput_values = []
+    total_latency_values = []
+    generated_token_counts = []
+
+    for run_index in range(
+        BENCHMARK_RUNS
+    ):
+        (
+            ttft_ms,
+            tokens_per_second,
+            total_latency_ms,
+            generated_tokens,
+        ) = run_generation(
+            model,
+            input_tokens,
+        )
+
+        ttft_values.append(ttft_ms)
+        throughput_values.append(
+            tokens_per_second
+        )
+        total_latency_values.append(
+            total_latency_ms
+        )
+        generated_token_counts.append(
+            generated_tokens
+        )
+
+        print(
+            f"Run {run_index + 1}: "
+            f"TTFT={ttft_ms:.2f} ms, "
+            f"Tokens/sec={tokens_per_second:.2f}, "
+            f"Total={total_latency_ms:.2f} ms"
+        )
+
+    # ---------------------------------------------------------
+    # Results
+    # ---------------------------------------------------------
+
+    print("\n=== Qwen3-0.6B Benchmark ===")
+
+    print(
+        f"Prompt tokens: "
+        f"{len(input_tokens)}"
     )
 
     print(
-        f"Generated tokens:    {generated_tokens}"
+        f"Generated tokens: "
+        f"{statistics.mean(generated_token_counts):.0f}"
     )
 
-    print(
-        f"First token ID:      {first_token}"
+    print_stats(
+        "Time to First Token",
+        ttft_values,
+        "ms",
     )
 
-    print(
-        f"TTFT:                {ttft_ms:.2f} ms"
+    print_stats(
+        "Generation Throughput",
+        throughput_values,
+        "tokens/sec",
     )
 
-    print(
-        f"Total generation:    {generation_time_s:.3f} s"
+    print_stats(
+        "Total Generation Latency",
+        total_latency_values,
+        "ms",
     )
-
-    print(
-        f"Tokens/sec:          {tokens_per_second:.2f}"
-    )
-
-    print(
-        f"Total latency:       {total_latency_ms:.2f} ms"
-    )
-
-    print("\n--- Output ---")
-    print(output_text)
 
 
 if __name__ == "__main__":
