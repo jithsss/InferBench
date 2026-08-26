@@ -4,12 +4,13 @@ InferBench is a professional AI inference benchmarking, profiling, and optimizat
 
 ## ✨ Key Features
 
-- **Multi-Modal Benchmarking**: Accurately measure end-to-end latencies (Avg, P50, P95, P99) and throughput (Tokens/sec or FPS) for:
+- **Multi-Modal Benchmarking**: Accurately measure end-to-end latencies (Avg, P50, P95, P99) and throughput (Tokens/sec, FPS, or RTF) for:
   - **Large Language Models** (e.g., Qwen3)
   - **Image Classification** (e.g., ResNet50)
   - **Object Detection** (e.g., YOLOv8n)
+  - **Speech Recognition** (e.g., Whisper Tiny/Base/Small)
 - **Interactive Pro Dashboard**: Visualize your profiling results and optimization scaling via a modern, native Streamlit web interface.
-- **YOLO Quality Validation**: Object detection quality is validated via a robust prediction agreement metric (cosine similarity between FP32 ONNX and INT8 TRT), ensuring high-fidelity models without requiring large evaluation datasets locally.
+- **Quality Validation**: Measure Whisper speech recognition quality using Word Error Rate (WER) and Character Error Rate (CER). Object detection quality is validated via prediction agreement metrics.
 - **Advanced Profiling**: Profile ONNX models to automatically detect performance bottlenecks, such as implicit CPU fallbacks and inefficient host-to-device memory copies (`Memcpy`).
 
 ## 📁 Architecture
@@ -60,6 +61,9 @@ python -m inferbench run qwen3-0.6b
 
 # Object Detection (TensorRT Engine)
 python -m inferbench run yolov8n-tensorrt-int8
+
+# Speech Recognition (PyTorch FP16)
+python -m inferbench run whisper-tiny-fp16
 ```
 
 ### 3. Profile ONNX Graphs
@@ -73,3 +77,7 @@ Compare results, view speedup metrics, and read diagnostic alerts in the browser
 ```bash
 streamlit run dashboard/app.py
 ```
+
+### Speech Metrics
+- **RTF (Real-Time Factor)**: inference_time / audio_duration. A value < 1 means inference is faster than real-time. Lower is better.
+- **WER/CER**: Word Error Rate and Character Error Rate measure transcription quality against a ground-truth reference. Lower is better.
