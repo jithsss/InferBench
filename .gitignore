@@ -216,3 +216,28 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# InferBench virtual environments
+.venv/
+.venv-qwen/
+
+# InferBench model artifacts
+*.onnx
+*.onnx_data
+*.engine
+*.plan
+*.safetensors
+*.bin
+
+# Downloaded models
+models/
+
+# Calibration datasets
+quantization/calibration/images/
+quantization/calibration/calibration_set/
+quantization/calibration/evaluation/
+
+# Quantization caches
+*.cache
+
+# ONNX Runtime profiling
+profiling/*.json
