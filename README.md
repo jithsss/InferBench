@@ -13,6 +13,8 @@ InferBench is not just a measurement tool; it is a complete deployment lab that 
 ## ✨ Key Features
 
 - **Aggressive Quantization**: Built-in scripts to calibrate and compile INT8 TensorRT engines for complex models like YOLOv8n and ResNet50.
+- **Dynamic "Custom Upload" Dashboard**: Benchmark your own models on the fly! Upload ad-hoc `.onnx` or `.engine` files alongside custom `.npy` tensors, audio, or images. Also supports full ONNX GenAI Large Language Model benchmarking via `.zip` archive uploads.
+- **PyCUDA-Free Architecture**: Native PyTorch C-compatible tensor pointers (`.data_ptr()`) are used for advanced TensorRT GPU memory bindings, completely eliminating painful PyCUDA/MSVC build dependencies on Windows.
 - **Multi-Modal Benchmarking**: Accurately measure end-to-end latencies (Avg, P50, P95, P99) and throughput (Tokens/sec, FPS, or RTF) for:
   - **Large Language Models** (e.g., Qwen3)
   - **Image Classification** (e.g., ResNet50)
@@ -97,6 +99,7 @@ Compare results, view speedup metrics across precisions, and read automated diag
 ```bash
 streamlit run dashboard/app.py
 ```
+*(The dashboard also features a **Custom Upload** tab where you can upload arbitrary `.onnx` or TensorRT `.engine` models to test with auto-generated dummy data, custom `.npy` inputs, or raw media files like `.mp4` and `.wav`. You can also dynamically benchmark custom Large Language Models by uploading an ONNX GenAI `.zip` folder!)*
 
 ---
 
