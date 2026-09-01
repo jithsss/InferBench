@@ -404,57 +404,106 @@ with tab_upload:
     st.subheader('Dynamic Model Benchmark')
     import os
     import tempfile
+    import zipfile
+    import shutil
     from benchmarks.dynamic_benchmark import DynamicBenchmark
+    from benchmarks.dynamic_llm_benchmark import DynamicLLMBenchmark
 
-    model_file = st.file_uploader('Upload Model (.onnx, .engine)', type=['onnx', 'engine', 'plan'])
-    
-    data_mode = st.radio('Input Data Source', ['Auto-Generate Dummy Data', 'Upload Custom Tensor (.npy)', 'Upload Media File'])
-    
-    data_file = None
-    if data_mode == 'Upload Custom Tensor (.npy)':
-        data_file = st.file_uploader('Upload Input Tensor', type=['npy'])
-    elif data_mode == 'Upload Media File':
-        data_file = st.file_uploader('Upload Media', type=['png', 'jpg', 'jpeg', 'mp4', 'wav', 'opus'])
+    workload_type = st.radio("Workload Type", ["Standard (Vision/Audio)", "Large Language Model (LLM)"], horizontal=True)
 
-    if st.button('Run Benchmark') and model_file:
-        with st.spinner('Running Dynamic Benchmark...'):
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.' + model_file.name.split('.')[-1]) as tmp_m:
-                tmp_m.write(model_file.getvalue())
-                tmp_m_path = tmp_m.name
-            
-            try:
-                db = DynamicBenchmark(tmp_m_path)
+    if workload_type == "Standard (Vision/Audio)":
+        model_file = st.file_uploader('Upload Model (.onnx, .engine)', type=['onnx', 'engine', 'plan'])
+        
+        data_mode = st.radio('Input Data Source', ['Auto-Generate Dummy Data', 'Upload Custom Tensor (.npy)', 'Upload Media File'])
+        
+        data_file = None
+        if data_mode == 'Upload Custom Tensor (.npy)':
+            data_file = st.file_uploader('Upload Input Tensor', type=['npy'])
+        elif data_mode == 'Upload Media File':
+            data_file = st.file_uploader('Upload Media', type=['png', 'jpg', 'jpeg', 'mp4', 'wav', 'opus'])
+
+        if st.button('Run Benchmark') and model_file:
+            with st.spinner('Running Dynamic Benchmark...'):
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.' + model_file.name.split('.')[-1]) as tmp_m:
+                    tmp_m.write(model_file.getvalue())
+                    tmp_m_path = tmp_m.name
                 
-                input_data = None
-                if data_mode == 'Auto-Generate Dummy Data':
-                    input_data = db.generate_dummy_data()
-                elif data_file:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.' + data_file.name.split('.')[-1]) as tmp_d:
-                        tmp_d.write(data_file.getvalue())
-                        tmp_d_path = tmp_d.name
+                try:
+                    db = DynamicBenchmark(tmp_m_path)
                     
-                    if data_mode == 'Upload Custom Tensor (.npy)':
-                        input_data = db.load_npy(tmp_d_path)
+                    input_data = None
+                    if data_mode == 'Auto-Generate Dummy Data':
+                        input_data = db.generate_dummy_data()
+                    elif data_file:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.' + data_file.name.split('.')[-1]) as tmp_d:
+                            tmp_d.write(data_file.getvalue())
+                            tmp_d_path = tmp_d.name
+                        
+                        if data_mode == 'Upload Custom Tensor (.npy)':
+                            input_data = db.load_npy(tmp_d_path)
+                        else:
+                            input_data = db.process_media(tmp_d_path)
+                        os.unlink(tmp_d_path)
                     else:
-                        input_data = db.process_media(tmp_d_path)
-                    os.unlink(tmp_d_path)
-                else:
-                    st.warning('No data provided, falling back to dummy data.')
-                    input_data = db.generate_dummy_data()
+                        st.warning('No data provided, falling back to dummy data.')
+                        input_data = db.generate_dummy_data()
 
-                res = db.run_benchmark(input_data)
+                    res = db.run_benchmark(input_data)
+                    
+                    st.success('Benchmark Complete!')
+                    st.write(f'**Inferred Input Shape:** `{res["input_shape"]}` (`{res["input_dtype"]}`)')
+                    
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric('Avg Latency', f'{res["avg_latency"]:.2f} ms')
+                    c2.metric('P50', f'{res["p50"]:.2f} ms')
+                    c3.metric('P99', f'{res["p99"]:.2f} ms')
+                    c4.metric('Throughput', f'{res["fps"]:.2f} FPS')
+                except Exception as e:
+                    import traceback
+                    st.error(f'Error: {e}')
+                    st.code(traceback.format_exc())
+                finally:
+                    if os.path.exists(tmp_m_path):
+                        os.unlink(tmp_m_path)
+    else:
+        model_zip = st.file_uploader('Upload ONNX GenAI Model Folder (.zip)', type=['zip'])
+        prompt = st.text_area("Input Prompt", value="Explain what model quantization is and why INT8 can improve inference performance.")
+        max_new_tokens = st.slider("Max New Tokens", min_value=1, max_value=2048, value=128)
+        
+        if st.button('Run LLM Benchmark') and model_zip:
+            with st.spinner('Extracting Model and Running Benchmark...'):
+                temp_dir = tempfile.mkdtemp()
+                zip_path = os.path.join(temp_dir, "model.zip")
+                extract_path = os.path.join(temp_dir, "model_extracted")
                 
-                st.success('Benchmark Complete!')
-                st.write(f'**Inferred Input Shape:** `{res["input_shape"]}` (`{res["input_dtype"]}`)')
+                with open(zip_path, "wb") as f:
+                    f.write(model_zip.getvalue())
                 
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric('Avg Latency', f'{res["avg_latency"]:.2f} ms')
-                c2.metric('P50', f'{res["p50"]:.2f} ms')
-                c3.metric('P99', f'{res["p99"]:.2f} ms')
-                c4.metric('Throughput', f'{res["fps"]:.2f} FPS')
-            except Exception as e:
-                import traceback
-                st.error(f'Error: {e}')
-                st.code(traceback.format_exc())
-            finally:
-                os.unlink(tmp_m_path)
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_path)
+                
+                # Zip might contain a single top-level folder
+                model_dir_to_use = extract_path
+                contents = os.listdir(extract_path)
+                if len(contents) == 1 and os.path.isdir(os.path.join(extract_path, contents[0])):
+                    model_dir_to_use = os.path.join(extract_path, contents[0])
+                
+                try:
+                    llm_db = DynamicLLMBenchmark(model_dir_to_use)
+                    res = llm_db.run_benchmark(prompt, max_new_tokens)
+                    
+                    st.success('LLM Benchmark Complete!')
+                    st.write(f"**Prompt Tokens:** {res['prompt_tokens']} | **Generated Tokens:** {res['generated_tokens']}")
+                    
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric('TTFT', f"{res['ttft_ms']:.2f} ms")
+                    c2.metric('Throughput', f"{res['tokens_per_second']:.2f} tok/s")
+                    c3.metric('Total Latency', f"{res['total_latency_ms']:.2f} ms")
+                    
+                    st.text_area("Model Output", value=res['output_text'], height=200, disabled=True)
+                except Exception as e:
+                    import traceback
+                    st.error(f'Error: {e}')
+                    st.code(traceback.format_exc())
+                finally:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
