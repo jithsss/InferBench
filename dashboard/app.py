@@ -1,12 +1,16 @@
 import sys
 from pathlib import Path
-import json
-import pandas as pd
-import streamlit as st
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+import json
+import pandas as pd
+import streamlit as st
+from runtimes.environment import configure_nvidia_runtime
+
+configure_nvidia_runtime()
 
 from benchmarks.result_writer import load_history
 from profiling.diagnostics import diagnose, load_latest_summary
@@ -108,13 +112,14 @@ st.title("Inference Performance Lab")
 st.markdown("Benchmark, optimize, profile, and compare AI inference workloads across architectures.")
 
 # Tabs
-tab_overview, tab_classification, tab_detection, tab_speech, tab_llm, tab_diagnostics = st.tabs([
+tab_overview, tab_classification, tab_detection, tab_speech, tab_llm, tab_diagnostics, tab_upload = st.tabs([
     "📊 Overview", 
     "🖼️ Classification", 
     "🔍 Object Detection", 
     "🎙️ Speech",
     "💬 LLM", 
-    "🛠️ Diagnostics"
+    "🛠️ Diagnostics",
+    "📤 Custom Upload"
 ])
 
 with tab_overview:
@@ -394,3 +399,62 @@ with tab_diagnostics:
                 st.text(f"Providers: {providers}")
                 st.text(f"Input: {summary.get('input_name')} {summary.get('input_shape')}")
                 st.text(f"Output: {summary.get('output_name')}")
+
+with tab_upload:
+    st.subheader('Dynamic Model Benchmark')
+    import os
+    import tempfile
+    from benchmarks.dynamic_benchmark import DynamicBenchmark
+
+    model_file = st.file_uploader('Upload Model (.onnx, .engine)', type=['onnx', 'engine', 'plan'])
+    
+    data_mode = st.radio('Input Data Source', ['Auto-Generate Dummy Data', 'Upload Custom Tensor (.npy)', 'Upload Media File'])
+    
+    data_file = None
+    if data_mode == 'Upload Custom Tensor (.npy)':
+        data_file = st.file_uploader('Upload Input Tensor', type=['npy'])
+    elif data_mode == 'Upload Media File':
+        data_file = st.file_uploader('Upload Media', type=['png', 'jpg', 'jpeg', 'mp4', 'wav', 'opus'])
+
+    if st.button('Run Benchmark') and model_file:
+        with st.spinner('Running Dynamic Benchmark...'):
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.' + model_file.name.split('.')[-1]) as tmp_m:
+                tmp_m.write(model_file.getvalue())
+                tmp_m_path = tmp_m.name
+            
+            try:
+                db = DynamicBenchmark(tmp_m_path)
+                
+                input_data = None
+                if data_mode == 'Auto-Generate Dummy Data':
+                    input_data = db.generate_dummy_data()
+                elif data_file:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.' + data_file.name.split('.')[-1]) as tmp_d:
+                        tmp_d.write(data_file.getvalue())
+                        tmp_d_path = tmp_d.name
+                    
+                    if data_mode == 'Upload Custom Tensor (.npy)':
+                        input_data = db.load_npy(tmp_d_path)
+                    else:
+                        input_data = db.process_media(tmp_d_path)
+                    os.unlink(tmp_d_path)
+                else:
+                    st.warning('No data provided, falling back to dummy data.')
+                    input_data = db.generate_dummy_data()
+
+                res = db.run_benchmark(input_data)
+                
+                st.success('Benchmark Complete!')
+                st.write(f'**Inferred Input Shape:** `{res["input_shape"]}` (`{res["input_dtype"]}`)')
+                
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric('Avg Latency', f'{res["avg_latency"]:.2f} ms')
+                c2.metric('P50', f'{res["p50"]:.2f} ms')
+                c3.metric('P99', f'{res["p99"]:.2f} ms')
+                c4.metric('Throughput', f'{res["fps"]:.2f} FPS')
+            except Exception as e:
+                import traceback
+                st.error(f'Error: {e}')
+                st.code(traceback.format_exc())
+            finally:
+                os.unlink(tmp_m_path)
